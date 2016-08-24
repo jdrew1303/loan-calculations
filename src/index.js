@@ -1,3 +1,5 @@
+// @note - vzorce apod. http://svse.sweb.cz/materialy/uvery.pdf
+
 // ------------------------------------------------------------------------------------------------
 // Helper methods
 
