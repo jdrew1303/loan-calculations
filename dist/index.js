@@ -18,6 +18,15 @@ function _objectWithoutProperties(obj, keys) { var target = {}; for (var i in ob
 // Helper methods
 
 /**
+ * Rounds number to two decimal points
+ * @param number {number} Number to round
+ * @return {number}
+ */
+function round(number) {
+  return Math.round(number * 100) / 100;
+}
+
+/**
  * Converts milliseconds to days
  * @param time {number} Time in milliseconds
  * @returns {number}
@@ -229,7 +238,7 @@ function getRpsn(_ref9) {
       iteration++;
     }
     testRate = testRate * 12;
-    var rpsn = Math.round(testRate * 10000) / 100;
+    var rpsn = round(testRate * 100);
     resolve(_extends({
       rpsn: rpsn,
       amount: amount,
@@ -261,11 +270,11 @@ function getInstallmentCount(_ref10) {
     if (interestRate == 0) {
       term = Math.ceil(amount / installment);
     } else {
-      term = Math.ceil(round(Math.log(interestRate * amount / (A * (1 + interestRate)) + 1) / Math.log(1 + interestRate), 4));
+      term = Math.ceil(round(Math.log(interestRate * amount / (amount * (1 + interestRate)) + 1) / Math.log(1 + interestRate), 4));
       if (term > 0) {
-        var c = round(A * ((1 + interestRate) * (Math.pow(1 + interestRate, term) - 1) / interestRate), 2);
+        var c = round(amount * ((1 + interestRate) * (Math.pow(1 + interestRate, term) - 1) / interestRate));
         if (c > amount) {
-          c = amount - A * ((1 + interestRate) * (Math.pow(1 + interestRate, term - 1) - 1) / interestRate);
+          c = amount - amount * ((1 + interestRate) * (Math.pow(1 + interestRate, term - 1) - 1) / interestRate);
           term = (term - 1) * 12 + Math.ceil(c / installment);
         } else term = term * 12;
       } else term = 0;
