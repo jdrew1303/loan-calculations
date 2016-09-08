@@ -5,4 +5,5 @@ logs
 node_modules
 src/tmp.js
 coverage
+.coveralls.yml
 npm-debug.log
