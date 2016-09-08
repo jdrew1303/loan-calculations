@@ -1,243 +1,133 @@
-// @note - vzorce apod. http://svse.sweb.cz/materialy/uvery.pdf
-
-// ------------------------------------------------------------------------------------------------
-// Helper methods
-
-/**
- * Rounds number to two decimal points
- * @param number {number} Number to round
- * @return {number}
+/*
+ * general helper functions
  */
-function round (number) {
-  return Math.round(number * 100) / 100
+
+const copyDate = date => new Date(date.getTime())
+
+// 2016-11-30T23:55:55 -> 2016-11-30T00:00:00
+const stripTime = date => {
+  let copy = copyDate(date)
+  copy.setUTCHours(0, 0, 0, 0, 0)
+  return copy
 }
 
-/**
- * Converts milliseconds to days
- * @param time {number} Time in milliseconds
- * @returns {number}
- */
-function millisecondsToDays (time) {
-  return Math.round(time / (1000 * 60 * 60 * 24))
+// 2016-11-30 -> 2016-12-30
+// 2016-12-30 -> 2017-01-30
+const incrementMonth = date => {
+  let copy = copyDate(date)
+  if (copy.getUTCMonth() === 11) {
+    copy.setUTCFullYear(copy.getUTCFullYear() + 1)
+    copy.setUTCMonth(0)
+  } else {
+    copy.setUTCMonth(copy.getUTCMonth() + 1)
+  }
+  return copy
 }
 
-/**
- * Calculates a product of array of numbers
- * @param arrayOfNumbers  Array of numbers
- * @returns {number}
- */
-function product (arrayOfNumbers) {
-  return arrayOfNumbers.reduce((n, r) => n * r, 1)
+// 2016-11-30, 2016-12-01 -> 1
+const dayDifference = (d1, d2) => {
+  const milliseconds = stripTime(d2) - stripTime(d1)
+  return Math.round(milliseconds / (1000 * 60 * 60 * 24))
 }
+
+// https://github.com/mikolalysenko/bisect/blob/master/bisect.js
+// Supposing that predicate is monotone over the interval [lo,hi), finds the
+// first occurence of where predicate is true up to a resolution of tolerance.
+const bisect = (pred, lo, hi, tol) => {
+  tol = tol || 1e-8
+  while (hi - lo > tol) {
+    // console.log(lo, hi)  // uncomment this to see the convergence rate
+    var m = (hi + lo) / 2
+    pred(m) ? hi = m : lo = m
+  }
+  return lo
+}
+
+// 0.17788346856832504 -> 17.79
+const round2 = float => Math.round(float * 100) / 100
+
+/*
+ * business logic
+ */
+
+// 2016-11-06 -> 2016-12-05
+// 2016-12-01 -> 2017-01-05
+const nextInstallmentDate = (date, installment_day) => {
+  let d = incrementMonth(date)
+  d.setUTCDate(installment_day)
+  return d
+}
+
+// this implements the calculation inside the RPSN sum definition
+const contribution = (monthly, rpsn) => fraction => monthly * Math.pow(1 + rpsn, -1 * fraction)
 
 /**
  * Calculates a sum of array of numbers
  * @param arrayOfNumbers  Array of numbers
  * @returns {number}
  */
-function sum (arrayOfNumbers) {
-  return arrayOfNumbers.reduce((n, r) => n + r, 0)
-}
+const sum = arrayOfNumbers => arrayOfNumbers.reduce((n, r) => n + r, 0)
 
 /**
- * Number of days in month of specified installment payment (ignores payment date)
- * @param loan {Object} Loan object
- *    @property acceptanceDate {Date} Loan start date
- * @param i {number} Installment number
- * @returns {number}
+ * Calculates total amount paid
+ * @param term {number} Number of installments
+ * @param monthly {number} Monthly payment
+ * @param date {Date} Acceptance date
+ * @param installmentDay {number} Day in month of installment payment
  */
-function getDaysInInstallmentMonth ({acceptanceDate}, i) {
-  return new Date(acceptanceDate.getFullYear(), acceptanceDate.getMonth() + i + 1, 0).getDate()
-}
+const getTotal = (term, monthly, date, installmentDay) => rpsn => {
+  // first, we need a list of installment dates
+  let dates = [copyDate(date)]
+  for (let i = 1; i <= term; i++) {
+    dates[i] = nextInstallmentDate(dates[i - 1], installmentDay)
+  }
+  dates.shift()  // drop the acceptance date
 
-/**
- * Get days in period for specified installment payment (doesn't ignore payment date)
- * @param loan {Object} Loan object
- *    @property defaultPayDay {number} Default installment payment day
- *    @property acceptanceDate {Date} Loan start date
- * @param i {number} Installment number
- * @returns {number}
- */
-function getDaysInInstallmentPeriod ({defaultPayDay, acceptanceDate}, i) {
-  const payDay = getInstallmentPaymentDay(defaultPayDay, getDaysInInstallmentMonth(acceptanceDate, i))
-  return millisecondsToDays(
-    getInstallmentPaymentDate(acceptanceDate, payDay, i)
-      .valueOf() - getInstallmentPaymentDate(acceptanceDate, payDay, i - 1).valueOf()
-  )
-}
+  // now, let's convert those into the number of days into the future
+  const fractions = dates.map(d => dayDifference(date, d) / 365.25)
 
-/**
- * Proper installment pay day for remaining month length
- *    @property defaultPayDay {number} Default installment payment day
- * @param daysInInstallmentMonth {number} Number of days in installment month
- * @returns {number}
- */
-function getInstallmentPaymentDay ({defaultPayDay}, daysInInstallmentMonth) {
-  return defaultPayDay > daysInInstallmentMonth ? daysInInstallmentMonth : defaultPayDay
-}
-
-/**
- * Get installment date
- * @param loan {Object} Loan object
- *    @property acceptanceDate {Date} Loan acceptance date
- * @param payDay {number} Proper installment payday
- * @param i {number} Installment num
- * @returns {Date}
- */
-function getInstallmentPaymentDate ({acceptanceDate}, payDay, i) {
-  if (i < 1) return acceptanceDate
-  const resultDate = getInstallmentPaymentDate(acceptanceDate, payDay, i - 1)
-  return new Date(resultDate.getFullYear(), resultDate.getMonth() + 1, payDay)
-}
-
-/**
- * Get days from acceptance date
- * @param loan {Object} Loan object
- *    @property defaultPayDay {number} Default installment payment day
- *    @property acceptanceDate {Date} Loan acceptance date
- * @param i {number} Installment num
- * @returns {number}
- */
-function getDaysFromAcceptance ({defaultPayDay, acceptanceDate}, i) {
-  return i < 1
-    ? 0
-    : getDaysInInstallmentPeriod(defaultPayDay, acceptanceDate, i) + getDaysFromAcceptance(defaultPayDay, acceptanceDate, i - 1)
+  // from these, calculate a list of monthly contributions to the total
+  return sum(fractions.map(contribution(monthly, rpsn)))
 }
 
 // ------------------------------------------------------------------------------------------------
 // Exported interface
 
 /**
- * Get installments sum
- * @param loan {Object} Loan object
- *    @property installment {number} Single installment value
- *    @property term {number} Number on installments (monthly payments)
- * @returns {Promise}
+ * Calculates total amount paid
+ * @param term {number} Number of installments
+ * @param monthly {number} Monthly payment
+ * @param date {Date} Acceptance date
+ * @param installmentDay {number} Day in month of installment payment
  */
-export function getSumPaid ({installment, term, ...rest}) {
-  return new Promise(resolve => {
-    if (!installment || !term) throw new Error('Installment amount and term must be defined')
-    const sumPaid = installment * term
-    resolve({
-      installment,
-      term,
-      sumPaid, ...rest
-    })
-  })
-}
-
-/**
- * Get trivial loan cost (sum overpaid)
- * @param loan {Object} Loan object
- *    @property amount {number} Loan amount
- *    @property sumPaid {number} Installments sum
- * @returns {Promise}
- */
-export function getLoanCost ({amount, sumPaid, ...rest}) {
-  return new Promise(resolve => {
-    if (!amount || !sumPaid) throw new Error('Loan amount and sum paid must be defined')
-    const loanCost = sumPaid - amount
-    resolve({
-      amount,
-      sumPaid,
-      loanCost, ...rest
-    })
-  })
+export function getSumPaid (term, monthly, date, installmentDay) {
+  return getTotal(term, monthly, date, installmentDay)(0)
 }
 
 /**
  * Single installment value
- * @param loan {Object} Loan object
- *    @property amount {number} Loan amount
- *    @property interestRate {number} Loan interest rate
- *    @property term {number} Number on installments (monthly payments)
+ * @param amount {number} Loan amount
+ * @param interestRate {number} Loan interest rate
+ * @param term {number} Number on installments (monthly payments)
+ * @param roundingFn {Function} Rounding function
  * @returns {Promise}
  */
-export function getInstallment ({amount, interestRate, term, ...rest}) {
-  return new Promise(resolve => {
-    if (!amount || !interestRate || !term) throw new Error('Loan amount, interest rate and term must be defined')
-    const installment = Math.round(amount * ((interestRate / 12) / (1 - Math.pow(1 + interestRate / 12, -(term / 12) * 12))))
-    resolve({
-      amount,
-      interestRate,
-      term,
-      installment, ...rest
-    })
-  })
+export function getInstallment (amount, interestRate, term, roundingFn = i => i) {
+  if (!amount || !interestRate || !term) throw new Error('Loan amount, interest rate and term must be defined')
+  return roundingFn(amount * ((interestRate / 12) / (1 - Math.pow(1 + interestRate / 12, -(term / 12) * 12))))
 }
 
 /**
- * Get loan RPSN (APR - annual percentage rate)
- * @param loan {Object} Loan object
- *    @property amount {number} Loan amount
- *    @property interestRate {number} Loan interest rate
- *    @property term {number} Number on installments (monthly payments)
- *    @property costs {number} Other monthly costs
- * @returns {Promise}
+ * Calculates loan yearly percentage rate
+ * @param amount {number} Loan amount
+ * @param term {number} Number of installments
+ * @param monthly {number} Monthly payment
+ * @param date {Date} Acceptance date
+ * @param installmentDay {number} Day in month of installment payment
+ * @example getRpsn(120000, 60, 2700, new Date('2016-07-05'), 5)
  */
-export function getRpsn ({amount, term, interestRate, costs = 0, ...rest}) {
-  return new Promise(resolve => {
-    var monthlyRate = interestRate / 12 // @FIXME tohle je jádro pudla, měsíční sazba není úrok / 12, protože intervaly splátek nejsou stejně dlouhé
-    var totalMonthPayment = ((amount + costs) * monthlyRate * Math.pow(1 + monthlyRate, term)) / (Math.pow(1 + monthlyRate, term) - 1)
-    var testRate = monthlyRate
-    var iteration = 1
-    var testResult = 0
-    // iterate until result = 0
-    var testDiff = testRate
-    while (iteration <= 100) {
-      testResult = ((testRate * Math.pow(1 + testRate, term)) / (Math.pow(1 + testRate, term) - 1)) - (totalMonthPayment / amount)
-      if (Math.abs(testResult) < 0.0000001) break
-      if (testResult < 0) testRate += testDiff
-      else testRate -= testDiff
-      testDiff = testDiff / 2
-      iteration++
-    }
-    testRate = testRate * 12
-    const rpsn = round(testRate * 100)
-    resolve({
-      rpsn,
-      amount,
-      term,
-      interestRate,
-      costs,
-      ...rest
-    })
-  })
+export function getRpsn (amount, term, monthly, date, installmentDay) {
+  const total = getTotal(term, monthly, stripTime(date), installmentDay)
+  const predicate = x => total(x) - amount < 0
+  return round2(100 * bisect(predicate, 0, 10))
 }
-
-/**
- * Calculates number of installments in loan
- * @param loan {Object} Loan object
- *    @property amount {number} Loan amount
- *    @property installment {number} Installment amount
- *    @property interestRate {number} Loan interest rate
- * @return {Promise}
- */
-export function getInstallmentCount ({amount, installment, interestRate, ...rest}) {
-  return new Promise(resolve => {
-    if (!amount || !installment || !interestRate) throw new Error('Loan amount, installment amount and interest rate are required')
-    var term
-    if (interestRate == 0) {
-      term = Math.ceil(amount / installment)
-    }
-    else {
-      term = Math.ceil(round(Math.log(interestRate * amount / (amount * (1 + interestRate)) + 1) / Math.log(1 + interestRate), 4))
-      if (term > 0) {
-        var c = round(amount * ( (1 + interestRate) * (Math.pow(1 + interestRate, term) - 1) / interestRate ))
-        if (c > amount) {
-          c = amount - amount * ( (1 + interestRate) * (Math.pow(1 + interestRate, term - 1) - 1) / interestRate )
-          term = (term - 1) * 12 + Math.ceil(c / installment)
-        }
-        else term = term * 12
-      }
-      else term = 0
-    }
-    resolve({
-      term,
-      amount,
-      installment,
-      interestRate, ...rest
-    })
-  })
-}
-

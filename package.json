@@ -1,6 +1,6 @@
 {
   "name": "loan-calculations",
-  "version": "1.0.0-alpha",
+  "version": "1.0.0",
   "description": "Module for providing loan and interest calculations.",
   "main": "dist/index.js",
   "files": [
