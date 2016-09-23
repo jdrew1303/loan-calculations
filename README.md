@@ -1,8 +1,8 @@
 # loan-calculations
 
 [![NPM version][npm-image]][npm-url]
-[![Build Status][travis-image]][travis-url]
-[![Coveralls Status][coveralls-image]][coveralls-url]
+[![Build Status](https://travis-ci.org/viktorbezdek/loan-calculations.svg?branch=master)](https://travis-ci.org/viktorbezdek/loan-calculations)
+[![Coverage Status](https://coveralls.io/repos/github/viktorbezdek/loan-calculations/badge.svg?branch=master)](https://coveralls.io/github/viktorbezdek/loan-calculations?branch=master)
 [![Dependency Status][depstat-image]][depstat-url]
 [![Downloads][download-badge]][npm-url]
 
